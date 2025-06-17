@@ -1,0 +1,3 @@
+mcp[cli]
+gooddata-sdk
+python-dotenv
