@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 import yaml
-from gooddata_sdk import GoodDataSdk
+from gooddata_sdk import GoodDataSdk, CatalogDependentEntitiesRequest, CatalogEntityIdentifier
 from gooddata_api_client.model.scan_sql_request import ScanSqlRequest
 from ldm_quality_check import has_no_description, obfuscated_title_check, semantic_similarity_check
 from visualization_converter import convert
@@ -151,9 +151,7 @@ def explain_metric(metric_id: str) -> dict:
     """
     try:
         declarative_analytics = gd.catalog_workspace_content.get_declarative_analytics_model(workspace_id=GD_WORKSPACE)
-        metrics = getattr(declarative_analytics.analytics, "metrics", [])
-        dashboards = getattr(declarative_analytics.analytics, "analytical_dashboards", [])
-        insights = getattr(declarative_analytics.analytics, "visualization_objects", [])
+        metrics = declarative_analytics.analytics.metrics
 
         # 1. Find MAQL for the metric (try id and local_identifier)
         maql = None
@@ -162,106 +160,29 @@ def explain_metric(metric_id: str) -> dict:
         found_metric = None
         for m in metrics:
             if m.id == metric_id or getattr(m, "local_identifier", None) == metric_id:
-                # Try top-level maql, then content['maql']
-                maql = getattr(m, "maql", None)
-                if not maql:
-                    maql = getattr(m, "content", {}).get("maql")
-                # Try top-level description, then content['description']
-                description = getattr(m, "description", None)
-                if not description:
-                    description = getattr(m, "content", {}).get("description")
-                local_identifier = getattr(m, "local_identifier", None)
+                maql = m.content.get("maql")
+                description = m.description
                 found_metric = m
                 break
 
-        # 1b. If not found, try to find in referenced insights
-        debug_info = {}
-        if maql is None:
-            # Collect all insight ids from usage
-            referenced_insight_ids = set()
-            for dashboard in dashboards:
-                content = getattr(dashboard, "content", {})
-                layout = content.get("layout", {})
-                sections = layout.get("sections", [])
-                for section in sections:
-                    for item in section.get("items", []):
-                        widget = item.get("widget", {})
-                        insight = widget.get("insight", {})
-                        if insight:
-                            iid = insight.get("identifier", {}).get("id")
-                            if iid:
-                                referenced_insight_ids.add(iid)
-            # Search these insights for a measure with matching id/local_identifier
-            for insight in insights:
-                if getattr(insight, "id", None) in referenced_insight_ids:
-                    content = getattr(insight, "content", {})
-                    measures = content.get("measures", [])
-                    for measure in measures:
-                        # Try id, localIdentifier, and definition
-                        if (
-                            measure.get("id") == metric_id or
-                            measure.get("localIdentifier") == metric_id or
-                            measure.get("definition", {}).get("metric", {}).get("id") == metric_id
-                        ):
-                            maql = measure.get("definition", {}).get("metric", {}).get("expression")
-                            if not maql:
-                                maql = measure.get("maql")
-                            local_identifier = measure.get("localIdentifier")
-                            debug_info["found_in_insight"] = insight.id
-                            break
-                    if maql:
-                        break
-            if maql is None:
-                debug_info["all_metric_ids"] = [getattr(m, "id", None) for m in metrics]
-                debug_info["all_metric_local_identifiers"] = [getattr(m, "local_identifier", None) for m in metrics]
+        result_dependencies = gd.catalog_workspace_content.get_dependent_entities_graph_from_entry_points(GD_WORKSPACE, CatalogDependentEntitiesRequest(identifiers=[CatalogEntityIdentifier(id=metric_id, type="metric")]))        
+        used_in = [(i.title, i.type) for i in result_dependencies.graph.nodes]
+        
+        whole_graph = gd.catalog_workspace_content.get_dependent_entities_graph(GD_WORKSPACE)
 
-        # 2. Find usage in dashboards/insights
-        usage = []
-        for dashboard in dashboards:
-            dashboard_title = getattr(dashboard, "title", None)
-            dashboard_id = getattr(dashboard, "id", None)
-            content = getattr(dashboard, "content", {})
-            layout = content.get("layout", {})
-            sections = layout.get("sections", [])
-            for section in sections:
-                for item in section.get("items", []):
-                    widget = item.get("widget", {})
-                    # 1. Insight widgets
-                    insight = widget.get("insight", {})
-                    if insight:
-                        usage.append({
-                            "dashboard_id": dashboard_id,
-                            "dashboard_title": dashboard_title,
-                            "widget_title": widget.get("title"),
-                            "insight_id": insight.get("identifier", {}).get("id"),
-                        })
-                    # 2. Drills from measure
-                    for drill in widget.get("drills", []):
-                        origin = drill.get("origin", {})
-                        measure = origin.get("measure", {})
-                        if measure and (
-                            measure.get("localIdentifier") == local_identifier or
-                            measure.get("localIdentifier") == metric_id
-                        ):
-                            usage.append({
-                                "dashboard_id": dashboard_id,
-                                "dashboard_title": dashboard_title,
-                                "widget_title": widget.get("title"),
-                                "drill_type": drill.get("type"),
-                                "drill_origin_measure": measure.get("localIdentifier"),
-                            })
-
-        explanation = f"MAQL: {maql}\n(Translation to plain English not implemented)"
-
+        uses_ids = [(edge[0].id, edge[0].type) for edge in whole_graph.graph.edges if edge[1].id == metric_id and edge[1].type == "metric"]
+        uses = [(i.title, i.type) for i in whole_graph.graph.nodes if (i.id, i.type) in uses_ids]
+        # TODO: it would be helpful to fetch uses descriptions
+        
         result = {
             "metric_id": metric_id,
             "maql": maql,
             "description": description,
-            "explanation": explanation,
-            "usage": usage[:10],  # limit to 10 usages for brevity
+            "usage_total_count": len(used_in),
+            "usage_example": used_in[:10],  # limit to 10 usages for brevity
+            "uses": uses,
+            "uses_total_count": len(uses),
         }
-        if debug_info:
-            result["debug_info"] = debug_info
         return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
         return {"error": str(e)}
