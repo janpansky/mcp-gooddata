@@ -132,14 +132,14 @@ interface:
 mcpServers:
    gooddata:
      type: stdio
-     command: /opt/homebrew/bin/uv
+     command: /Users/janpansky/.local/bin/uv
      args:
       - run
       - --with 
       - mcp 
       - mcp 
       - run 
-      - ./server.py
+      - /Users/janpansky/Documents/mpc-gooddata/server.py
      timeout: 30000  
 #   puppeteer:
 #     type: stdio
