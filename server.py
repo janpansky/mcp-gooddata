@@ -6,6 +6,7 @@ import yaml
 from gooddata_sdk import GoodDataSdk
 from gooddata_api_client.model.scan_sql_request import ScanSqlRequest
 from ldm_quality_check import has_no_description, obfuscated_title_check, semantic_similarity_check
+from visualization_converter import convert
 import uuid
 
 # Load environment variables from .env file
@@ -300,26 +301,25 @@ def create_visualization(prompt: str) -> dict:
     Returns a confirmation message and the new visualization's ID.
     """
     try:
-        result = gd.compute.ai_chat(workspace_id=GD_WORKSPACE, question=prompt)
-        return result.get("created_visualizations", {})
-        """
-        created_visualizations = result.get("created_visualizations", {})
-        objects = created_visualizations.get("objects", [])
-        if not objects:
+        result = gd.compute.ai_chat_stream(workspace_id=GD_WORKSPACE, question=prompt)
+        visualization = [chunk for chunk in result if "createdVisualizations" in chunk]
+        if len(visualization) == 0:
             return {"error": "No visualization object found in AI chat output."}
-        new_visualization = objects[0]
+        visualization = visualization[0].get("createdVisualizations", {})
+        visualization_converted = convert(visualization)
+        if len(visualization_converted) == 0:
+            return {"error": "Conversion failed."}
         declarative_workspace = gd.catalog_workspace.get_declarative_workspace(workspace_id=GD_WORKSPACE)
-        # Add the new visualization object to the workspace analytics layer
         if hasattr(declarative_workspace.analytics, "visualization_objects"):
-            declarative_workspace.analytics.visualization_objects.append(new_visualization)
+            declarative_workspace.analytics.visualization_objects.append(visualization_converted)
         else:
-            declarative_workspace.analytics.visualization_objects = [new_visualization]
+            declarative_workspace.analytics.visualization_objects = [visualization_converted]
         gd.catalog_workspace.put_declarative_workspace(workspace_id=GD_WORKSPACE, workspace=declarative_workspace)
+        
         return {
-            "message": f"Visualization '{new_visualization.get('title')}' added to workspace.",
-            "id": new_visualization.get("id")
+            "message": f"Visualization '{visualization_converted.get('title')}' added to workspace.",
+            "id": visualization_converted.get("id")
         }
-        """
     except Exception as e:
         return {"error": str(e)}
 
