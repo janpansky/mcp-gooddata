@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 import yaml
 from gooddata_sdk import GoodDataSdk
+from gooddata_api_client.model.scan_sql_request import ScanSqlRequest
 from ldm_quality_check import has_no_description, obfuscated_title_check, semantic_similarity_check
 import uuid
 
@@ -17,6 +18,7 @@ mcp = FastMCP("Demo")
 GD_HOST = os.environ.get("GOODDATA_HOST")
 GD_TOKEN = os.environ.get("GOODDATA_TOKEN")
 GD_WORKSPACE = os.environ.get("GOODDATA_WORKSPACE")
+GD_DATA_SOURCE = os.environ.get("GOODDATA_DATA_SOURCE")
 gd = GoodDataSdk.create(host_=GD_HOST, token_=GD_TOKEN)
 
 @mcp.tool(
@@ -84,12 +86,20 @@ def analyze_field(dataset_id: str, field_id: str) -> dict:
                             "dataset_title": ds.title,
                             "field_id": attr.id,
                             "field_title": attr.title,
-                            "field_description": getattr(attr, "description", None)
+                            "field_description": getattr(attr, "description", None),
+                            "source_column": getattr(attr, "source_column", None),
+                            "source_table": ds.data_source_table_id.path[-1],
                         }
                         break
-        # Sample data (placeholder: GoodData SDK does not support direct DB sampling)
-        sample_data = []
-        # TODO: Integrate with DB or use GoodData API to fetch sample data if possible
+                        
+        if not field_meta:
+            raise Exception(f"Field {field_id} not found in LDM")
+        # Sample data
+        sql_request = ScanSqlRequest(
+            sql=f"SELECT DISTINCT \"{field_meta['source_column']}\" FROM \"{field_meta['source_table']}\" ORDER BY RANDOM() LIMIT 10;",
+        )
+        result = gd.client.actions_api.scan_sql(GD_DATA_SOURCE, sql_request)
+        sample_data = ", ".join([row[0] for row in result["data_preview"]])
         result = {"field_meta": field_meta, "sample_data": sample_data}
         return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
