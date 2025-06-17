@@ -18,7 +18,7 @@ This repository demonstrates how to build and run an MCP (Model Context Protocol
 1. **Clone the repository:**
    ```sh
    git clone <your-repo-url>
-   cd mpc-gooddata
+   cd mcp-gooddata
    ```
 2. **Create and activate a Python virtual environment:**
    ```sh
