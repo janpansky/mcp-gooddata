@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 import yaml
 from gooddata_sdk import GoodDataSdk
 from ldm_quality_check import has_no_description, obfuscated_title_check, semantic_similarity_check
+import uuid
 
 # Load environment variables from .env file
 load_dotenv()
@@ -278,6 +279,92 @@ def search(term: str, types: list[str] = []) -> dict:
         }
     except Exception as e:
         return {"error": str(e)}
+
+@mcp.tool(
+    name="create_visualization",
+    description="Send a single prompt (e.g. 'Create a visual x and y') to the GoodData AI compute engine to create a visualization. Returns a list of visualization objects (id, title, type, etc). No other input is required."
+)
+def create_visualization(prompt: str) -> dict:
+    """
+    Send a prompt like 'create a visual x and z' to the GoodData AI compute engine (search_ai) to create a visualization.
+    Only the prompt is required as input.
+    Returns the GoodData search_ai results for visualization objects.
+    """
+    try:
+        return gd.compute.search_ai(
+            question=prompt,
+            object_types=["visualizationObject"]
+        ).results
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool(
+    name="add_visualization_to_dashboard",
+    description="Ask the user for the visualization_id of an existing visualization (as returned by create_visualization). Only after receiving the visualization_id, place it on the first dashboard. This tool does not generate or search for the visualization_id itself. Returns a YAML message confirming placement."
+)
+def add_visualization_to_dashboard(visualization_id: str) -> str:
+    """
+    You must provide the visualization_id of an existing visualization (ask for it if not provided). This tool will then place it on the first dashboard. It does not generate or search for the visualization_id itself. Returns a YAML message confirming the visual has been placed in the dashboard.
+    """
+    try:
+        declarative_workspace = gd.catalog_workspace.get_declarative_workspace(workspace_id=GD_WORKSPACE)
+        dashboards = getattr(declarative_workspace.analytics, "analytical_dashboards", [])
+        if not dashboards:
+            return yaml.safe_dump({"error": "No dashboards found in workspace."}, sort_keys=False, allow_unicode=True)
+        dashboard = dashboards[0]
+        dashboard_id = dashboard.id
+        layout = dashboard.content.get("layout", {})
+        sections = layout.get("sections", [])
+
+        # Use the first item in the first section as a template
+        if sections and sections[0]["items"]:
+            from copy import deepcopy
+            template_item = deepcopy(sections[0]["items"][0])
+            # Update only the fields needed for the new visualization
+            widget = template_item["widget"]
+            widget["insight"]["identifier"]["id"] = visualization_id
+            widget["title"] = f"Visualization {visualization_id}"
+            # Generate a new unique localIdentifier if present
+            if "localIdentifier" in widget:
+                widget["localIdentifier"] = str(uuid.uuid4())
+            template_item["widget"] = widget
+            # Prepend the new item
+            sections[0]["items"] = [template_item] + sections[0]["items"]
+        else:
+            # Fallback: create a minimal valid item if no template exists
+            new_item = {
+                "size": {"xl": {"gridWidth": 12}},
+                "type": "IDashboardLayoutItem",
+                "widget": {
+                    "type": "insight",
+                    "insight": {"identifier": {"id": visualization_id, "type": "visualizationObject"}},
+                    "title": f"Visualization {visualization_id}",
+                    "localIdentifier": str(uuid.uuid4()),
+                    "configuration": {
+                        "description": {
+                            "includeMetrics": False,
+                            "source": "widget",
+                            "visible": True
+                        },
+                        "hideTitle": False
+                    },
+                    "properties": {}
+                }
+            }
+            sections.append({
+                "items": [new_item],
+                "type": "IDashboardLayoutSection"
+            })
+        layout["sections"] = sections
+        dashboard.content["layout"] = layout
+        gd.catalog_workspace.put_declarative_workspace(workspace_id=GD_WORKSPACE, workspace=declarative_workspace)
+        result = {
+            "message": f"Visualization {visualization_id} has been placed in the dashboard.",
+            "visualization_id": visualization_id
+        }
+        return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
+    except Exception as e:
+        return yaml.safe_dump({"error": str(e)}, sort_keys=False, allow_unicode=True)
 
 # Reset logging settings that MCP made because we want to use our own logging configuration configured in the bootstrap script
 logging.basicConfig(force=True, handlers=[], level=logging.NOTSET)

@@ -6,6 +6,8 @@ This repository demonstrates a Model Context Protocol (MCP) server that exposes 
 - **analyze_ldm**: Analyze the Logical Data Model (LDM) for missing or well-defined descriptions
 - **patch_ldm**: Patch (update) the title and/or description of datasets or attributes in the LDM
 - **explain_metric**: Explain how a metric is computed (MAQL, description, and usage in dashboards/insights)
+- **create_visualization**: Create a visualization by sending a natural language prompt to GoodData AI compute
+- **add_visualization_to_dashboard**: Add a visualization to the first dashboard by specifying only its visualization_id
 - Secure environment variable handling
 - Interactive development and testing with MCP Inspector
 
@@ -54,6 +56,8 @@ This repository demonstrates a Model Context Protocol (MCP) server that exposes 
 | analyze_ldm    | Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on datasets and attributes. Returns counts and examples. |
 | patch_ldm      | Patch (update) the title and/or description of a dataset or attribute in the Logical Data Model (LDM). Persists changes. |
 | explain_metric | Explain how a given metric is computed, including its MAQL expression, description, and where it is used across dashboards and insights. |
+| create_visualization | Create a visualization by sending a natural language prompt to GoodData AI compute. Returns a list of visualization objects (id, title, etc). Minimal input: only the prompt string. |
+| add_visualization_to_dashboard | Add a visualization to the first dashboard by specifying only its visualization_id (as returned by create_visualization). Places the widget using the schema of existing dashboard items to avoid corruption. |
 
 ### Tool Details
 
@@ -99,6 +103,35 @@ This repository demonstrates a Model Context Protocol (MCP) server that exposes 
     }
     ```
 
+#### create_visualization
+- **Arguments:**
+  - `prompt` (str): Natural language prompt describing the visualization to create (e.g., "Show sales by region as a bar chart").
+- **Returns:**
+  - List of visualization objects with fields like id, title, description, type, visualization_type, and match_score.
+- **Notes:**
+  - Minimal interface: only the prompt string is required.
+  - Results are returned as raw dicts from GoodData AI compute.
+
+#### add_visualization_to_dashboard
+- **Arguments:**
+  - `visualization_id` (str): The id of the visualization to add (must be obtained from create_visualization).
+- **Returns:**
+  - YAML message confirming placement, or an error message.
+- **Behavior:**
+  - The tool clones the structure of existing dashboard widgets to ensure compatibility and prevent corruption.
+  - The new visualization is placed at the top of the first dashboard section.
+- **Usage Workflow:**
+  1. Call `create_visualization` with a prompt.
+  2. Copy the returned visualization_id.
+  3. Call `add_visualization_to_dashboard` with that id.
+
+---
+
+## Troubleshooting Dashboard Widget Placement
+- Widgets are now added by cloning the schema of existing dashboard items, including required fields (e.g., localIdentifier, configuration, dateDataSet, etc.).
+- If you encounter dashboard corruption, check that your dashboard contains at least one valid section and item to use as a template.
+- For advanced troubleshooting, inspect the dashboard JSON and ensure all required fields are present in the widget structure.
+
 ---
 
 ## Interactive Development with MCP Inspector
@@ -112,12 +145,6 @@ This repository demonstrates a Model Context Protocol (MCP) server that exposes 
 
 ## License
 MIT
-   - Copy `.env.template` to `.env` and fill in your real credentials:
-     ```sh
-     cp .env.template .env
-     # Edit .env and set your GOODDATA_HOST and GOODDATA_TOKEN
-     ```
-   - The server will automatically load these values from `.env` using [python-dotenv](https://pypi.org/project/python-dotenv/).
 
 ## Running the MCP Server with Inspector
 
