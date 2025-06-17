@@ -15,7 +15,10 @@ GD_HOST = os.environ.get("GOODDATA_HOST")
 GD_TOKEN = os.environ.get("GOODDATA_TOKEN")
 gd = GoodDataSdk.create(host_=GD_HOST, token_=GD_TOKEN)
 
-@mcp.tool()
+@mcp.tool(
+    name="analyze_ldm",
+    description="Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on datasets and attributes. Returns counts and examples."
+)
 def analyze_ldm(workspace_id: str) -> dict:
     """Analyze the declarative LDM for missing/well-defined descriptions."""
     try:
@@ -25,12 +28,10 @@ def analyze_ldm(workspace_id: str) -> dict:
         well_defined = []
         for ds in datasets:
             ds_desc = getattr(ds, "description", None)
-            # Dataset description check
             if not ds_desc or ds_desc.strip() == "" or ds_desc.strip() == ds.title.strip():
                 missing.append({"type": "dataset", "id": ds.id, "title": ds.title, "desc": ds_desc})
             else:
                 well_defined.append({"type": "dataset", "id": ds.id, "title": ds.title, "desc": ds_desc})
-            # Attribute description check
             for attr in getattr(ds, "attributes", []):
                 attr_desc = getattr(attr, "description", None)
                 if not attr_desc or attr_desc.strip() == "" or attr_desc.strip() == attr.title.strip():
@@ -43,6 +44,195 @@ def analyze_ldm(workspace_id: str) -> dict:
             "missing_examples": missing[:5],
             "well_defined_examples": well_defined[:5]
         }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+def analyze_field(workspace_id: str, dataset_id: str, field_id: str) -> dict:
+    """Gather info about a specific field: DB name, dataset, title, description, and sample data."""
+    try:
+        # Fetch LDM info
+        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=workspace_id)
+        field_meta = None
+        for ds in getattr(declarative_ldm.ldm, "datasets", []):
+            if ds.id == dataset_id:
+                for attr in getattr(ds, "attributes", []):
+                    if attr.id == field_id:
+                        field_meta = {
+                            "dataset_id": ds.id,
+                            "dataset_title": ds.title,
+                            "field_id": attr.id,
+                            "field_title": attr.title,
+                            "field_description": getattr(attr, "description", None)
+                        }
+                        break
+        # Sample data (placeholder: GoodData SDK does not support direct DB sampling)
+        sample_data = []
+        # TODO: Integrate with DB or use GoodData API to fetch sample data if possible
+        return {"field_meta": field_meta, "sample_data": sample_data}
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool(
+    name="patch_ldm",
+    description="Patch (update) the title and/or description of a dataset or attribute in the Logical Data Model (LDM). Persists changes."
+)
+def patch_ldm(workspace_id: str, object_type: str, object_id: str, title: str = None, description: str = None) -> dict:
+    """Patch the title and/or description of a dataset or attribute in the LDM."""
+    try:
+        # Fetch current LDM
+        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=workspace_id)
+        updated = False
+        for ds in getattr(declarative_ldm.ldm, "datasets", []):
+            if ds.id == object_id:
+                if title:
+                    ds.title = title
+                if description:
+                    ds.description = description
+                updated = True
+            for attr in getattr(ds, "attributes", []):
+                if attr.id == object_id:
+                    if title:
+                        attr.title = title
+                    if description:
+                        attr.description = description
+                    updated = True
+                for attr in getattr(ds, "attributes", []):
+                    if attr.id == field_id:
+                        attr.title = new_title
+                        attr.description = new_description
+                        updated = True
+        if updated:
+            gd.catalog_workspace_content.put_declarative_ldm(workspace_id=workspace_id, ldm=declarative_ldm.ldm)
+            return {"status": "OK"}
+        else:
+            return {"error": "Field not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool(
+    name="explain_metric",
+    description="Explain how a given metric is computed, including its MAQL expression, description, and where it is used across dashboards and insights."
+)
+def explain_metric(workspace_id: str, metric_id: str) -> dict:
+    """
+    Explain how a given metric is computed and where it is used.
+    Unfold nested metrics and translate MAQL (not implemented).
+    """
+    try:
+        declarative_analytics = gd.catalog_workspace_content.get_declarative_analytics_model(workspace_id=workspace_id)
+        metrics = getattr(declarative_analytics.analytics, "metrics", [])
+        dashboards = getattr(declarative_analytics.analytics, "analytical_dashboards", [])
+        insights = getattr(declarative_analytics.analytics, "visualization_objects", [])
+
+        # 1. Find MAQL for the metric (try id and local_identifier)
+        maql = None
+        description = None
+        local_identifier = None
+        found_metric = None
+        for m in metrics:
+            if m.id == metric_id or getattr(m, "local_identifier", None) == metric_id:
+                # Try top-level maql, then content['maql']
+                maql = getattr(m, "maql", None)
+                if not maql:
+                    maql = getattr(m, "content", {}).get("maql")
+                # Try top-level description, then content['description']
+                description = getattr(m, "description", None)
+                if not description:
+                    description = getattr(m, "content", {}).get("description")
+                local_identifier = getattr(m, "local_identifier", None)
+                found_metric = m
+                break
+
+        # 1b. If not found, try to find in referenced insights
+        debug_info = {}
+        if maql is None:
+            # Collect all insight ids from usage
+            referenced_insight_ids = set()
+            for dashboard in dashboards:
+                content = getattr(dashboard, "content", {})
+                layout = content.get("layout", {})
+                sections = layout.get("sections", [])
+                for section in sections:
+                    for item in section.get("items", []):
+                        widget = item.get("widget", {})
+                        insight = widget.get("insight", {})
+                        if insight:
+                            iid = insight.get("identifier", {}).get("id")
+                            if iid:
+                                referenced_insight_ids.add(iid)
+            # Search these insights for a measure with matching id/local_identifier
+            for insight in insights:
+                if getattr(insight, "id", None) in referenced_insight_ids:
+                    content = getattr(insight, "content", {})
+                    measures = content.get("measures", [])
+                    for measure in measures:
+                        # Try id, localIdentifier, and definition
+                        if (
+                            measure.get("id") == metric_id or
+                            measure.get("localIdentifier") == metric_id or
+                            measure.get("definition", {}).get("metric", {}).get("id") == metric_id
+                        ):
+                            maql = measure.get("definition", {}).get("metric", {}).get("expression")
+                            if not maql:
+                                maql = measure.get("maql")
+                            local_identifier = measure.get("localIdentifier")
+                            debug_info["found_in_insight"] = insight.id
+                            break
+                    if maql:
+                        break
+            if maql is None:
+                debug_info["all_metric_ids"] = [getattr(m, "id", None) for m in metrics]
+                debug_info["all_metric_local_identifiers"] = [getattr(m, "local_identifier", None) for m in metrics]
+
+        # 2. Find usage in dashboards/insights
+        usage = []
+        for dashboard in dashboards:
+            dashboard_title = getattr(dashboard, "title", None)
+            dashboard_id = getattr(dashboard, "id", None)
+            content = getattr(dashboard, "content", {})
+            layout = content.get("layout", {})
+            sections = layout.get("sections", [])
+            for section in sections:
+                for item in section.get("items", []):
+                    widget = item.get("widget", {})
+                    # 1. Insight widgets
+                    insight = widget.get("insight", {})
+                    if insight:
+                        usage.append({
+                            "dashboard_id": dashboard_id,
+                            "dashboard_title": dashboard_title,
+                            "widget_title": widget.get("title"),
+                            "insight_id": insight.get("identifier", {}).get("id"),
+                        })
+                    # 2. Drills from measure
+                    for drill in widget.get("drills", []):
+                        origin = drill.get("origin", {})
+                        measure = origin.get("measure", {})
+                        if measure and (
+                            measure.get("localIdentifier") == local_identifier or
+                            measure.get("localIdentifier") == metric_id
+                        ):
+                            usage.append({
+                                "dashboard_id": dashboard_id,
+                                "dashboard_title": dashboard_title,
+                                "widget_title": widget.get("title"),
+                                "drill_type": drill.get("type"),
+                                "drill_origin_measure": measure.get("localIdentifier"),
+                            })
+
+        explanation = f"MAQL: {maql}\n(Translation to plain English not implemented)"
+
+        result = {
+            "metric_id": metric_id,
+            "maql": maql,
+            "description": description,
+            "explanation": explanation,
+            "usage": usage[:10],  # limit to 10 usages for brevity
+        }
+        if debug_info:
+            result["debug_info"] = debug_info
+        return result
     except Exception as e:
         return {"error": str(e)}
 

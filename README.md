@@ -1,11 +1,12 @@
 # GoodData MCP Server Example
 
-This repository demonstrates how to build and run an MCP (Model Context Protocol) server that exposes GoodData Cloud operations as LLM-friendly tools.
+This repository demonstrates a Model Context Protocol (MCP) server that exposes GoodData Cloud analytics and modeling operations as LLM-friendly tools for interactive analytics, data engineering, and AI workflows.
 
 ## Features
-- Example MCP tool: `analyze_ldm` for analyzing the Logical Data Model (LDM) of a GoodData workspace
-- **More tools and scenarios are in progress!**
-- Easily extensible for more GoodData scenarios
+- **analyze_ldm**: Analyze the Logical Data Model (LDM) for missing or well-defined descriptions
+- **patch_ldm**: Patch (update) the title and/or description of datasets or attributes in the LDM
+- **explain_metric**: Explain how a metric is computed (MAQL, description, and usage in dashboards/insights)
+- Secure environment variable handling
 - Interactive development and testing with MCP Inspector
 
 ## Requirements
@@ -30,6 +31,87 @@ This repository demonstrates how to build and run an MCP (Model Context Protocol
    pip install -r requirements.txt
    ```
 4. **Configure your GoodData credentials:**
+   - Copy `.env.template` to `.env` and fill in your `GOODDATA_HOST` and `GOODDATA_TOKEN` values:
+     ```sh
+     cp .env.template .env
+     # Edit .env with your GoodData Cloud host and API token
+     ```
+
+## Usage
+
+1. **Start the MCP server:**
+   ```sh
+   mcp dev server.py
+   ```
+2. **Open MCP Inspector:**
+   - The startup message will provide a link and authentication token.
+   - Open the Inspector UI in your browser and paste in the token if prompted.
+
+3. **Available Tools**
+
+| Tool Name      | Description                                                                 |
+|---------------|-----------------------------------------------------------------------------|
+| analyze_ldm    | Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on datasets and attributes. Returns counts and examples. |
+| patch_ldm      | Patch (update) the title and/or description of a dataset or attribute in the Logical Data Model (LDM). Persists changes. |
+| explain_metric | Explain how a given metric is computed, including its MAQL expression, description, and where it is used across dashboards and insights. |
+
+### Tool Details
+
+#### analyze_ldm
+- **Arguments:**
+  - `workspace_id` (str): GoodData workspace ID
+- **Returns:**
+  - Counts and examples of missing/well-defined descriptions for datasets and attributes:
+    ```json
+    {
+      "missing_descriptions_count": 3,
+      "well_defined_descriptions_count": 7,
+      "missing_examples": [...],
+      "well_defined_examples": [...]
+    }
+    ```
+
+#### patch_ldm
+- **Arguments:**
+  - `workspace_id` (str): GoodData workspace ID
+  - `object_type` (str): "dataset" or "attribute"
+  - `object_id` (str): ID of the dataset or attribute to patch
+  - `title` (str, optional): New title
+  - `description` (str, optional): New description
+- **Returns:**
+  - Success status and the updated object, or error message
+
+#### explain_metric
+- **Arguments:**
+  - `workspace_id` (str): GoodData workspace ID
+  - `metric_id` (str): Metric identifier (id or local_identifier)
+- **Returns:**
+  - MAQL expression, description, and usage locations (dashboards, widgets, insights):
+    ```json
+    {
+      "metric_id": "of_orders",
+      "maql": "SELECT COUNT({label/order_id})",
+      "description": "Counts the number of orders.",
+      "explanation": "MAQL: SELECT COUNT({label/order_id})\n(Translation to plain English not implemented)",
+      "usage": [
+        {"dashboard_id": "...", "dashboard_title": "...", "widget_title": "...", "insight_id": "..."}
+      ]
+    }
+    ```
+
+---
+
+## Interactive Development with MCP Inspector
+- Use the Inspector UI for rapid prototyping and debugging of your MCP tools.
+- All tools are documented with explicit names and descriptions for LLM/AI workflows.
+- Secure authentication is enabled by default; use the provided token to access Inspector.
+
+## Extending
+- Add new tools by defining Python functions and annotating them with `@mcp.tool(name=..., description=...)`.
+- See `server.py` for examples and structure.
+
+## License
+MIT
    - Copy `.env.template` to `.env` and fill in your real credentials:
      ```sh
      cp .env.template .env
