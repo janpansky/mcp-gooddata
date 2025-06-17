@@ -243,5 +243,27 @@ def explain_metric(metric_id: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+@mcp.tool(
+    name="search",
+    description="Search facts, metrics, attributes, date instances, visualizations or dashboards in the workspace."
+)
+def search(term: str, types: list[str] = []) -> dict:
+    """
+    Use the GoodData SDK to search for facts, metrics, attributes, date instances, visualizations or dashboards in the workspace.
+    """
+    try:
+        return {
+            "result": [{
+                "id": result["id"],
+                "title": result["title"],
+                "description": result.get("description", None),
+                "type": result["type"],
+                "visualization_type": result.get("visualization_type", None),
+                "match_score": result.get("score", 0.0),
+            } for result in gd.compute.search_ai(workspace_id=GD_WORKSPACE, question=term, object_types=types).results]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 # Reset logging settings that MCP made because we want to use our own logging configuration configured in the bootstrap script
 logging.basicConfig(force=True, handlers=[], level=logging.NOTSET)
