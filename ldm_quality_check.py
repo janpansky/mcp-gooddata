@@ -85,7 +85,7 @@ def semantic_similarity_check(items: list[CatalogDeclarativeAttribute] | list[Ca
     for i, item1 in enumerate(items):            
         for item2 in items[i + 1:]:
             if check_semantic_similarity(item1.title, item2.title):
-                similar.append((item1.title, item2.title))
+                similar.append(({"title": item1.title, "id": item1.id}, {"title": item2.title, "id": item2.id}))
     return SemanticallySimilar(similar)
 
     

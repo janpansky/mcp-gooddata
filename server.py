@@ -42,16 +42,16 @@ def analyze_ldm() -> dict:
             similar_facts = semantic_similarity_check(ds.facts).semantically_similar_pairs
             for attr in ds.attributes:
                 if has_no_description(attr):
-                    missing_descriptions_attributes.append(attr.title)
+                    missing_descriptions_attributes.append({"title": attr.title, "id": attr.id})
                 obfuscated_title_result =  obfuscated_title_check(attr)
                 if obfuscated_title_result.is_obfuscated:
-                    obfuscated_title_attributes.append((attr.title, obfuscated_title_result.reason))
+                    obfuscated_title_attributes.append({"title": attr.title, "reason": obfuscated_title_result.reason, "id": attr.id})
             for fact in ds.facts:
                 if has_no_description(fact):
-                    missing_descriptions_facts.append(fact.title)
+                    missing_descriptions_facts.append({"title": fact.title, "id": fact.id})
                 obfuscated_title_result =  obfuscated_title_check(fact)
                 if obfuscated_title_result.is_obfuscated:
-                    obfuscated_title_facts.append((fact.title, obfuscated_title_result.reason))
+                    obfuscated_title_facts.append({"title": fact.title, "reason": obfuscated_title_result.reason, "id": fact.id})
         result = {
             "missing_descriptions_attributes": len(missing_descriptions_attributes),
             "missing_descriptions_facts ": len(missing_descriptions_facts),
