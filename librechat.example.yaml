@@ -140,8 +140,6 @@ mcpServers:
       - mcp 
       - run 
       - ./server.py
-     env:
-        MCP_PROXY_AUTH_TOKEN: TODO
      timeout: 30000  
 #   puppeteer:
 #     type: stdio
