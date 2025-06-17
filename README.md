@@ -68,6 +68,41 @@ This repository demonstrates how to build and run an MCP (Model Context Protocol
 - See the [GoodData Python SDK docs](https://pypi.org/project/gooddata-sdk/) for more API options.
 - See the [MCP Python SDK docs](https://github.com/modelcontextprotocol/python-sdk) for more MCP features.
 
+## Setting up LibreChat
+
+LibreChat is an open-source chat interface that can be used to interact with your MCP server. Here's how to set it up:
+
+### Prerequisites
+- Node.js v20.19.0+ (or ^22.12.0 or >= 23.0.0)
+- Git
+- MongoDB (Atlas or Community Server)
+
+### Installation Steps
+
+1. **Clone LibreChat:**
+   ```sh
+   git clone https://github.com/danny-avila/LibreChat.git
+   cp .env.librechat LibreChat/.env
+   cp librechat.example.yaml LibreChat/librechat.yaml
+   cd LibreChat
+   ```
+
+2. **Create and configure environment:**
+   ```sh
+   nvm use 20.19.0
+   ```
+
+3. **Install dependencies and build:**
+   ```sh
+   npm ci
+   npm run frontend
+   ```
+
+4. **Start LibreChat:**
+   ```sh
+   npm run backend
+   ```
+   
 ## Notes
 - **Security:** Never commit your API token or secrets to Git!
 - **Production:** The Inspector is for development only. In production, call MCP tools via HTTP or from LLM clients.

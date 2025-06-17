@@ -5,9 +5,12 @@ __pycache__/
 
 # Environment variables
 .env
+librechat.yaml
 
 # OS files
 .DS_Store
 
 # MCP Inspector cache
 .mcp-inspector/
+
+LibreChat/
