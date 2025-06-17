@@ -110,7 +110,7 @@ def analyze_field(dataset_id: str, field_id: str) -> dict:
     name="patch_ldm",
     description="Patch (update) the title and/or description of a dataset or attribute in the Logical Data Model (LDM). Persists changes."
 )
-def patch_ldm(object_type: str, object_id: str, title: str = None, description: str = None) -> dict:
+def patch_ldm(object_id: str, title: str = None, description: str = None) -> dict:
     """Patch the title and/or description of a dataset or attribute in the LDM."""
     try:
         # Fetch current LDM
@@ -123,6 +123,7 @@ def patch_ldm(object_type: str, object_id: str, title: str = None, description: 
                 if description:
                     ds.description = description
                 updated = True
+                break
             for attr in getattr(ds, "attributes", []):
                 if attr.id == object_id:
                     if title:
@@ -130,13 +131,9 @@ def patch_ldm(object_type: str, object_id: str, title: str = None, description: 
                     if description:
                         attr.description = description
                     updated = True
-                for attr in getattr(ds, "attributes", []):
-                    if attr.id == field_id:
-                        attr.title = new_title
-                        attr.description = new_description
-                        updated = True
+                    break
         if updated:
-            gd.catalog_workspace_content.put_declarative_ldm(workspace_id=GD_WORKSPACE, ldm=declarative_ldm.ldm)
+            gd.catalog_workspace_content.put_declarative_ldm(workspace_id=GD_WORKSPACE, ldm=declarative_ldm)
             return {"status": "OK"}
         else:
             return {"error": "Field not found"}
