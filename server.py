@@ -319,7 +319,7 @@ def create_visualization(prompt: str) -> dict:
         return {
             "message": f"Visualization '{visualization_converted.get('title')}' added to workspace.",
             "id": visualization_converted.get("id"),
-            "url": f"{GD_HOST}/analyze/#/{GD_WORKSPACE}/{visualization_converted["id"]}/edit"
+            "url": f"{GD_HOST}/analyze/#/{GD_WORKSPACE}/{visualization_converted['id']}/edit"
         }
     except Exception as e:
         return {"error": str(e)}
