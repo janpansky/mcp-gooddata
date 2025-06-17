@@ -2,6 +2,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+import yaml
 from gooddata_sdk import GoodDataSdk
 
 # Load environment variables from .env file
@@ -38,14 +39,15 @@ def analyze_ldm(workspace_id: str) -> dict:
                     missing.append({"type": "attribute", "id": attr.id, "title": attr.title, "desc": attr_desc, "dataset": ds.id})
                 else:
                     well_defined.append({"type": "attribute", "id": attr.id, "title": attr.title, "desc": attr_desc, "dataset": ds.id})
-        return {
+        result = {
             "missing_descriptions_count": len(missing),
             "well_defined_descriptions_count": len(well_defined),
             "missing_examples": missing[:5],
             "well_defined_examples": well_defined[:5]
         }
+        return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
-        return {"error": str(e)}
+        return yaml.safe_dump({"error": str(e)}, sort_keys=False, allow_unicode=True)
 
 @mcp.tool()
 def analyze_field(workspace_id: str, dataset_id: str, field_id: str) -> dict:
@@ -69,9 +71,10 @@ def analyze_field(workspace_id: str, dataset_id: str, field_id: str) -> dict:
         # Sample data (placeholder: GoodData SDK does not support direct DB sampling)
         sample_data = []
         # TODO: Integrate with DB or use GoodData API to fetch sample data if possible
-        return {"field_meta": field_meta, "sample_data": sample_data}
+        result = {"field_meta": field_meta, "sample_data": sample_data}
+        return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
-        return {"error": str(e)}
+        return yaml.safe_dump({"error": str(e)}, sort_keys=False, allow_unicode=True)
 
 @mcp.tool(
     name="patch_ldm",
@@ -232,7 +235,7 @@ def explain_metric(workspace_id: str, metric_id: str) -> dict:
         }
         if debug_info:
             result["debug_info"] = debug_info
-        return result
+        return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
         return {"error": str(e)}
 
