@@ -387,7 +387,8 @@ def add_visualization_to_dashboard(visualization_id: str, dashboard_id: str) -> 
         gd.catalog_workspace.put_declarative_workspace(workspace_id=GD_WORKSPACE, workspace=declarative_workspace)
         result = {
             "message": f"Visualization {visualization_id} has been placed in the dashboard.",
-            "visualization_id": visualization_id
+            "visualization_id": visualization_id,
+            "url": f"{GD_HOST}/dashboards/#/workspace/{GD_WORKSPACE}/dashboard/{dashboard_id}"
         }
         return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
