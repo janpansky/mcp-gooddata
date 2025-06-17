@@ -300,9 +300,9 @@ def create_visualization(prompt: str) -> dict:
 
 @mcp.tool(
     name="add_visualization_to_dashboard",
-    description="Ask the user for the visualization_id of an existing visualization (as returned by create_visualization). Only after receiving the visualization_id, place it on the first dashboard. This tool does not generate or search for the visualization_id itself. Returns a YAML message confirming placement."
+    description="Add a visualization to a dashboard. Requires the visualization_id and dashboard_id as inputs."
 )
-def add_visualization_to_dashboard(visualization_id: str) -> str:
+def add_visualization_to_dashboard(visualization_id: str, dashboard_id: str) -> str:
     """
     You must provide the visualization_id of an existing visualization (ask for it if not provided). This tool will then place it on the first dashboard. It does not generate or search for the visualization_id itself. Returns a YAML message confirming the visual has been placed in the dashboard.
     """
@@ -311,8 +311,9 @@ def add_visualization_to_dashboard(visualization_id: str) -> str:
         dashboards = getattr(declarative_workspace.analytics, "analytical_dashboards", [])
         if not dashboards:
             return yaml.safe_dump({"error": "No dashboards found in workspace."}, sort_keys=False, allow_unicode=True)
-        dashboard = dashboards[0]
-        dashboard_id = dashboard.id
+        dashboard = next((d for d in dashboards if d.id == dashboard_id), None)
+        if not dashboard:
+            return yaml.safe_dump({"error": f"Dashboard {dashboard_id} not found in workspace."}, sort_keys=False, allow_unicode=True)
         layout = dashboard.content.get("layout", {})
         sections = layout.get("sections", [])
 
