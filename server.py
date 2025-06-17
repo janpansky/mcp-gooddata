@@ -282,19 +282,34 @@ def search(term: str, types: list[str] = []) -> dict:
 
 @mcp.tool(
     name="create_visualization",
-    description="Send a single prompt (e.g. 'Create a visual x and y') to the GoodData AI compute engine to create a visualization. Returns a list of visualization objects (id, title, type, etc). No other input is required."
+    description="Creates a visualization using a prompt and adds it directly to the GoodData workspace. Returns a confirmation and the new visualization's ID."
 )
 def create_visualization(prompt: str) -> dict:
     """
-    Send a prompt like 'create a visual x and z' to the GoodData AI compute engine (search_ai) to create a visualization.
-    Only the prompt is required as input.
-    Returns the GoodData search_ai results for visualization objects.
+    Calls the GoodData AI compute engine to create a visualization and adds it to the workspace.
+    Returns a confirmation message and the new visualization's ID.
     """
     try:
-        return gd.compute.search_ai(
-            question=prompt,
-            object_types=["visualizationObject"]
-        ).results
+        result = gd.compute.ai_chat(workspace_id=GD_WORKSPACE, question=prompt)
+        return result.get("created_visualizations", {})
+        """
+        created_visualizations = result.get("created_visualizations", {})
+        objects = created_visualizations.get("objects", [])
+        if not objects:
+            return {"error": "No visualization object found in AI chat output."}
+        new_visualization = objects[0]
+        declarative_workspace = gd.catalog_workspace.get_declarative_workspace(workspace_id=GD_WORKSPACE)
+        # Add the new visualization object to the workspace analytics layer
+        if hasattr(declarative_workspace.analytics, "visualization_objects"):
+            declarative_workspace.analytics.visualization_objects.append(new_visualization)
+        else:
+            declarative_workspace.analytics.visualization_objects = [new_visualization]
+        gd.catalog_workspace.put_declarative_workspace(workspace_id=GD_WORKSPACE, workspace=declarative_workspace)
+        return {
+            "message": f"Visualization '{new_visualization.get('title')}' added to workspace.",
+            "id": new_visualization.get("id")
+        }
+        """
     except Exception as e:
         return {"error": str(e)}
 
