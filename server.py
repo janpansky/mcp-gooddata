@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 import yaml
 from gooddata_sdk import GoodDataSdk
+from ldm_quality_check import has_no_description, obfuscated_title_check, semantic_similarity_check
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,32 +20,45 @@ gd = GoodDataSdk.create(host_=GD_HOST, token_=GD_TOKEN)
 
 @mcp.tool(
     name="analyze_ldm",
-    description="Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on datasets and attributes. Returns counts and examples."
+    description="Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on attributes and facts. Returns counts and examples."
 )
 def analyze_ldm() -> dict:
-    """Analyze the declarative LDM for missing/well-defined descriptions."""
+    """Analyze the declarative LDM for missing/well-defined descriptions of attributes and facts."""
     try:
         declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=GD_WORKSPACE)
         datasets = getattr(declarative_ldm.ldm, "datasets", [])
-        missing = []
-        well_defined = []
+        missing_descriptions_attributes = []
+        missing_descriptions_facts = []
+        obfuscated_title_attributes = []
+        obfuscated_title_facts = []
+        similar_attributes = []
+        similar_facts = []
         for ds in datasets:
-            ds_desc = getattr(ds, "description", None)
-            if not ds_desc or ds_desc.strip() == "" or ds_desc.strip() == ds.title.strip():
-                missing.append({"type": "dataset", "id": ds.id, "title": ds.title, "desc": ds_desc})
-            else:
-                well_defined.append({"type": "dataset", "id": ds.id, "title": ds.title, "desc": ds_desc})
-            for attr in getattr(ds, "attributes", []):
-                attr_desc = getattr(attr, "description", None)
-                if not attr_desc or attr_desc.strip() == "" or attr_desc.strip() == attr.title.strip():
-                    missing.append({"type": "attribute", "id": attr.id, "title": attr.title, "desc": attr_desc, "dataset": ds.id})
-                else:
-                    well_defined.append({"type": "attribute", "id": attr.id, "title": attr.title, "desc": attr_desc, "dataset": ds.id})
+            similar_attributes = semantic_similarity_check(ds.attributes).semantically_similar_pairs
+            similar_facts = semantic_similarity_check(ds.facts).semantically_similar_pairs
+            for attr in ds.attributes:
+                if has_no_description(attr):
+                    missing_descriptions_attributes.append(attr.title)
+                obfuscated_title_result =  obfuscated_title_check(attr)
+                if obfuscated_title_result.is_obfuscated:
+                    obfuscated_title_attributes.append((attr.title, obfuscated_title_result.reason))
+            for fact in ds.facts:
+                if has_no_description(fact):
+                    missing_descriptions_facts.append(fact.title)
+                obfuscated_title_result =  obfuscated_title_check(fact)
+                if obfuscated_title_result.is_obfuscated:
+                    obfuscated_title_facts.append((fact.title, obfuscated_title_result.reason))
         result = {
-            "missing_descriptions_count": len(missing),
-            "well_defined_descriptions_count": len(well_defined),
-            "missing_examples": missing[:5],
-            "well_defined_examples": well_defined[:5]
+            "missing_descriptions_attributes": len(missing_descriptions_attributes),
+            "missing_descriptions_facts ": len(missing_descriptions_facts),
+            "missing_descriptions_attributes_examples": missing_descriptions_attributes[:5],
+            "missing_descriptions_facts_examples": missing_descriptions_facts[:5],
+            "obfuscated_title_attributes": len(obfuscated_title_attributes),
+            "obfuscated_title_facts": len(obfuscated_title_facts),
+            "obfuscated_title_attributes_examples": obfuscated_title_attributes[:5],
+            "obfuscated_title_facts_examples": obfuscated_title_facts[:5],
+            "similar_attributes": similar_attributes,
+            "similar_facts": similar_facts,
         }
         return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
     except Exception as e:
