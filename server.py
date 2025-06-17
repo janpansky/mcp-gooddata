@@ -14,16 +14,17 @@ mcp = FastMCP("Demo")
 # Initialize GoodData SDK using environment variables for host and token
 GD_HOST = os.environ.get("GOODDATA_HOST")
 GD_TOKEN = os.environ.get("GOODDATA_TOKEN")
+GD_WORKSPACE = os.environ.get("GOODDATA_WORKSPACE")
 gd = GoodDataSdk.create(host_=GD_HOST, token_=GD_TOKEN)
 
 @mcp.tool(
     name="analyze_ldm",
     description="Analyze the declarative Logical Data Model (LDM) for missing or well-defined descriptions on datasets and attributes. Returns counts and examples."
 )
-def analyze_ldm(workspace_id: str) -> dict:
+def analyze_ldm() -> dict:
     """Analyze the declarative LDM for missing/well-defined descriptions."""
     try:
-        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=workspace_id)
+        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=GD_WORKSPACE)
         datasets = getattr(declarative_ldm.ldm, "datasets", [])
         missing = []
         well_defined = []
@@ -49,12 +50,15 @@ def analyze_ldm(workspace_id: str) -> dict:
     except Exception as e:
         return yaml.safe_dump({"error": str(e)}, sort_keys=False, allow_unicode=True)
 
-@mcp.tool()
-def analyze_field(workspace_id: str, dataset_id: str, field_id: str) -> dict:
+@mcp.tool(
+    name="analyze_field",
+    description="Analyze the specific field in the Logical Data Model (LDM)"
+)
+def analyze_field(dataset_id: str, field_id: str) -> dict:
     """Gather info about a specific field: DB name, dataset, title, description, and sample data."""
     try:
         # Fetch LDM info
-        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=workspace_id)
+        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=GD_WORKSPACE)
         field_meta = None
         for ds in getattr(declarative_ldm.ldm, "datasets", []):
             if ds.id == dataset_id:
@@ -80,11 +84,11 @@ def analyze_field(workspace_id: str, dataset_id: str, field_id: str) -> dict:
     name="patch_ldm",
     description="Patch (update) the title and/or description of a dataset or attribute in the Logical Data Model (LDM). Persists changes."
 )
-def patch_ldm(workspace_id: str, object_type: str, object_id: str, title: str = None, description: str = None) -> dict:
+def patch_ldm(object_type: str, object_id: str, title: str = None, description: str = None) -> dict:
     """Patch the title and/or description of a dataset or attribute in the LDM."""
     try:
         # Fetch current LDM
-        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=workspace_id)
+        declarative_ldm = gd.catalog_workspace_content.get_declarative_ldm(workspace_id=GD_WORKSPACE)
         updated = False
         for ds in getattr(declarative_ldm.ldm, "datasets", []):
             if ds.id == object_id:
@@ -106,7 +110,7 @@ def patch_ldm(workspace_id: str, object_type: str, object_id: str, title: str = 
                         attr.description = new_description
                         updated = True
         if updated:
-            gd.catalog_workspace_content.put_declarative_ldm(workspace_id=workspace_id, ldm=declarative_ldm.ldm)
+            gd.catalog_workspace_content.put_declarative_ldm(workspace_id=GD_WORKSPACE, ldm=declarative_ldm.ldm)
             return {"status": "OK"}
         else:
             return {"error": "Field not found"}
@@ -117,13 +121,13 @@ def patch_ldm(workspace_id: str, object_type: str, object_id: str, title: str = 
     name="explain_metric",
     description="Explain how a given metric is computed, including its MAQL expression, description, and where it is used across dashboards and insights."
 )
-def explain_metric(workspace_id: str, metric_id: str) -> dict:
+def explain_metric(metric_id: str) -> dict:
     """
     Explain how a given metric is computed and where it is used.
     Unfold nested metrics and translate MAQL (not implemented).
     """
     try:
-        declarative_analytics = gd.catalog_workspace_content.get_declarative_analytics_model(workspace_id=workspace_id)
+        declarative_analytics = gd.catalog_workspace_content.get_declarative_analytics_model(workspace_id=GD_WORKSPACE)
         metrics = getattr(declarative_analytics.analytics, "metrics", [])
         dashboards = getattr(declarative_analytics.analytics, "analytical_dashboards", [])
         insights = getattr(declarative_analytics.analytics, "visualization_objects", [])
