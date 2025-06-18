@@ -2,19 +2,29 @@
 
 This repository demonstrates a Model Context Protocol (MCP) server that exposes GoodData Cloud analytics and modeling operations as LLM-friendly tools for interactive analytics, data engineering, and AI workflows.
 
-## Features
-- **analyze_ldm**: Analyze the Logical Data Model (LDM) for missing or well-defined descriptions
-- **patch_ldm**: Patch (update) the title and/or description of datasets or attributes in the LDM
-- **explain_metric**: Explain how a metric is computed (MAQL, description, and usage in dashboards/insights)
-- **create_visualization**: Create a visualization by sending a natural language prompt to GoodData AI compute
-- **add_visualization_to_dashboard**: Add a visualization to the first dashboard by specifying only its visualization_id
-- Secure environment variable handling
-- Interactive development and testing with MCP Inspector
+---
 
-## Requirements
-- Python 3.8+
-- Node.js (for MCP Inspector)
-- GoodData Cloud account and API token
+## Quick Reference & Requirements
+
+### System Requirements
+- **Python**: 3.8+
+- **Node.js**: 16+ (for MCP Inspector)
+- **GoodData Cloud** account and API token
+
+### Required Files
+- `.env` (copy from `.env.template` and fill in all variables)
+- `requirements.txt` (install with pip)
+- `server.py` (main MCP server)
+- `visualization_converter.py` (AI → visualization object conversion)
+- `ldm_quality_check.py` (LDM validation and quality checks)
+
+### Environment Variables (must be set in `.env`)
+- `GOODDATA_HOST`
+- `GOODDATA_TOKEN`
+- `GOODDATA_WORKSPACE`
+- `GOODDATA_DATA_SOURCE`  # (required for DB sample queries and field sampling)
+
+---
 
 ## Setup
 
@@ -40,6 +50,103 @@ This repository demonstrates a Model Context Protocol (MCP) server that exposes 
      ```
 
 ## Usage
+
+### Environment Variables
+
+The following environment variables must be set (e.g., in your `.env`):
+- `GOODDATA_HOST`
+- `GOODDATA_TOKEN`
+- `GOODDATA_WORKSPACE`
+- `GOODDATA_DATA_SOURCE`  # (NEW: required for DB sample queries)
+
+### Key Updates (after latest pull)
+- **Imports:**
+  - `visualization_converter.py` is now used for converting AI output to visualization objects.
+  - `ldm_quality_check.py` is used for LDM validation.
+- **Visualization Creation:**
+  - `create_visualization` now uses `gd.compute.ai_chat_stream` and the `convert` function.
+  - Returns a direct edit URL for the created visualization.
+- **Dashboard Placement:**
+  - `add_visualization_to_dashboard` returns a direct dashboard URL.
+- **Sample Data:**
+  - Uses `ScanSqlRequest` to fetch field samples from the data source (requires `GOODDATA_DATA_SOURCE`).
+- **LDM Patch:**
+  - `patch_ldm` signature is now `patch_ldm(object_id, title=None, description=None)`.
+- **Metric Usage:**
+  - Uses dependency graph APIs to find where metrics are used or referenced.
+
+---
+
+## How to Find Absolute Paths for MCP Server Configuration
+
+To configure the MCP server in LibreChat (or similar), you need to provide absolute paths to the `/uv` command (for running the server) and to your `server.py` file. Here is how you can find them:
+
+### 1. Find the path to `uv` (microvenv runner)
+Run:
+```bash
+which uv
+```
+This will output something like `/Users/youruser/.local/bin/uv`. Use this as the `command` in your YAML config.
+
+### 2. Find the path to your `server.py`
+Run:
+```bash
+realpath server.py
+```
+Or if not installed, use:
+```bash
+pwd
+```
+then append `/server.py` to your current directory.
+
+### Example MCP Server YAML Block
+```yaml
+mcpServers:
+   gooddata:
+     type: stdio
+     command: /Users/janpansky/.local/bin/uv
+     args:
+      - run
+      - --with 
+      - mcp 
+      - mcp 
+      - run 
+      - /Users/janpansky/Documents/mpc-gooddata/server.py
+     timeout: 30000  
+```
+
+---
+
+## Running LibreChat (UI) via Docker
+
+To use the MCP server with the LibreChat UI, you must run LibreChat in Docker.
+
+**Steps:**
+
+1. **Clone the LibreChat repository:**
+   ```sh
+   git clone https://github.com/danny-avila/LibreChat.git
+   cd LibreChat
+   ```
+2. **Start LibreChat using Docker Compose:**
+   ```sh
+   docker compose --profile=all up
+   ```
+   This will build and run all necessary services (UI, backend, database, etc).
+
+3. **Access LibreChat UI:**
+   - Open your browser and go to [http://localhost:3080](http://localhost:3080) (default port).
+   - Configure your MCP server in the settings or via the `librechat.example.yaml` as shown above.
+
+**Note:**
+- Ensure Docker is installed and running on your machine.
+- For more details, see the [LibreChat documentation](https://github.com/danny-avila/LibreChat).
+
+---
+
+## Additional Notes
+- If you encounter errors about missing fields or types, check that your environment variables are set and that you are using the correct, updated tool signatures.
+- For any new features or bugfixes, see the latest commit messages and the `visualization_converter.py` and `ldm_quality_check.py` modules for details.
 
 1. **Start the MCP server:**
    ```sh
@@ -158,62 +265,39 @@ MIT
    - Go to the Inspector UI in your browser.
    - Select the `analyze_ldm` tool, enter a `workspace_id`, and run it.
 
-## Versioning with Git
-
-1. **Initialize Git (if not already):**
-   ```sh
-   git init
-   git add .
-   git commit -m "Initial GoodData MCP server example"
-   ```
-2. **Push to your remote repository:**
-   ```sh
-   git remote add origin <your-repo-url>
-   git push -u origin main
-   ```
-
 ## Extending
 - Add more tools in `server.py` using the `@mcp.tool()` decorator.
 - See the [GoodData Python SDK docs](https://pypi.org/project/gooddata-sdk/) for more API options.
 - See the [MCP Python SDK docs](https://github.com/modelcontextprotocol/python-sdk) for more MCP features.
 
-## Setting up LibreChat
+## Running LibreChat (UI) via Docker
 
-LibreChat is an open-source chat interface that can be used to interact with your MCP server. Here's how to set it up:
+LibreChat is an open-source chat interface that can be used to interact with your MCP server. The recommended way to run LibreChat is via Docker Compose, which sets up all dependencies automatically (UI, backend, database, etc).
 
-### Prerequisites
-- Node.js v20.19.0+ (or ^22.12.0 or >= 23.0.0)
-- Git
-- MongoDB (Atlas or Community Server)
-
-### Installation Steps
+### Quick Start (Recommended)
 
 1. **Clone LibreChat:**
    ```sh
    git clone https://github.com/danny-avila/LibreChat.git
-   cp .env.librechat LibreChat/.env
-   cp librechat.example.yaml LibreChat/librechat.yaml
    cd LibreChat
    ```
-
-2. **Create and configure environment:**
+2. **Start LibreChat using Docker Compose:**
    ```sh
-   nvm use 20.19.0
+   docker compose --profile=all up
    ```
+   This builds and runs all necessary services. See [LibreChat documentation](https://github.com/danny-avila/LibreChat) for details.
 
-3. **Install dependencies and build:**
-   ```sh
-   npm ci
-   npm run frontend
-   ```
+3. **Access LibreChat UI:**
+   - Open your browser at [http://localhost:3080](http://localhost:3080)
+   - Configure your MCP server in the settings or via the `librechat.yaml` as shown above.
 
-4. **Start LibreChat:**
-   ```sh
-   npm run backend
-   ```
-   
+**Advanced/manual setup:** If you want to run LibreChat without Docker (for development), see the official LibreChat documentation for Node.js, MongoDB, and build instructions.
+
+---
+
 ## Notes
 - **Security:** Never commit your API token or secrets to Git!
+
 - **Production:** The Inspector is for development only. In production, call MCP tools via HTTP or from LLM clients.
 
 ---
